@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de umidade da lavoura</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+:root{--bg:#0d1117;--panel:#151b24;--line:#2d3a4d;--text:#eef3f9;--muted:#a9b6c6;--accent:#4aa8ff;font-size:17px}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;line-height:1.45}
+header,main{max-width:1560px;margin:0 auto;padding:10px 20px 4px}
+header h1{margin:0;font-size:1.5rem}
+header p{margin:4px 0 0;color:var(--muted);max-width:70ch}
+main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:start;padding-top:6px;padding-bottom:8px}
+.left{display:flex;flex-direction:column;gap:8px;min-width:0}
+@media(max-width:920px){main{grid-template-columns:1fr}}
+.maprow{display:grid;grid-template-columns:300px minmax(0,1fr);gap:12px;align-items:start}
+.mapcol{min-width:0;display:flex;flex-direction:column;gap:12px}
+.sidecards{display:flex;flex-direction:column;gap:12px;min-width:0}
+@media(max-width:1200px){.maprow{grid-template-columns:1fr}.sidecards{order:2;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+button,input{font:inherit}
+:focus-visible{outline:3px solid #ffb000;outline-offset:2px}
+.months{display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.months button{padding:6px 13px;min-height:40px;border-radius:999px;border:1px solid var(--line);background:#1d2634;color:var(--muted);cursor:pointer}
+.months button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#07121f;font-weight:700}
+.stage{position:relative;aspect-ratio:16/10;width:100%;background:radial-gradient(ellipse at 50% 40%,#1a2230,#0a0e14 75%);overflow:hidden;touch-action:none}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+#ov{cursor:crosshair}
+.controls{display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--line)}
+.controls button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:#1d2634;color:var(--text);cursor:pointer}
+.controls input[type=range]{flex:1;accent-color:var(--accent);height:30px}
+.controls time,.controls output{min-width:6em;text-align:right;color:var(--muted)}
+.hint{padding:0 14px 12px;color:var(--muted);font-size:.85rem}
+aside{display:flex;flex-direction:column;gap:12px}
+.card{padding:14px 16px}
+.card h2{margin:0 0 8px;font-size:1rem;color:var(--muted)}
+.irr{display:flex;gap:8px}
+.irr button{flex:1;min-height:40px;padding:6px 8px;font-size:.88rem;border-radius:8px;border:1px solid #2b6ea3;background:#17446a;color:#e6f4ff;cursor:pointer}
+.irr button.ghost{flex:none;background:#1d2634;border-color:var(--line);color:var(--muted)}
+.irr button:disabled{opacity:.45;cursor:not-allowed}
+.irrmsg{margin-top:8px;color:var(--muted)}
+.irrmsg.warn{color:#ffb36b}
+.confirm{position:absolute;inset:0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(5,8,12,.62);padding:12px}
+.confirm[hidden]{display:none}
+.confirm .box{background:var(--panel);border:1px solid #7a3a46;border-radius:12px;padding:16px 18px;max-width:400px}
+.confirm h3{margin:0 0 6px;color:#ffb3b3}
+.confirm p{margin:0 0 14px}
+.confirm .actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.confirm button{min-height:44px;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:#1d2634;color:var(--text);cursor:pointer}
+.confirm button.danger{background:#7a2f2f;border-color:#a34444;color:#fff0f0}
+.leafwrap{display:flex;gap:12px;align-items:center}
+#leaf{width:130px;height:96px;border-radius:6px;background:#1b2a1d;flex:none}
+.leafwrap p{margin:0;color:var(--muted)}
+#leafTxt b{color:var(--text)}
+#chM{width:100%;height:200px;display:block}
+.chmonth{font-size:1.05rem;font-weight:700;margin:-2px 0 6px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:.85rem;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:4px;margin-right:5px;vertical-align:middle;border-radius:2px}
+.opt{display:flex;align-items:center;gap:12px;font-weight:700;cursor:pointer}
+.opt input,.layers input{width:24px;height:24px;accent-color:var(--accent)}
+#pestBody{margin-top:10px}
+.layers label{display:flex;align-items:center;gap:10px;padding:4px 0;cursor:pointer}
+.layers b{margin-left:auto;color:var(--muted)}
+.alerts{list-style:none;margin:8px 0 0;padding:0;max-height:160px;overflow:auto}
+.alerts button{width:100%;min-height:42px;text-align:left;cursor:pointer;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--text);padding:6px 8px}
+.alerts button:hover{background:#1d2634}
+.alerts button[aria-current=true]{border-color:var(--accent);background:#1d2634}
+.detail{margin-top:8px;padding:10px 12px;background:#1b2330;border-radius:8px;white-space:pre-line}
+.bar{overflow:hidden}
+.kcap{color:var(--muted);padding:10px 18px 0;font-size:.85rem;line-height:1.2}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr)}
+.kpi{appearance:none;position:relative;background:transparent;border:0;border-left:1px solid var(--line);color:var(--text);text-align:left;cursor:pointer;padding:8px 18px 16px;min-height:90px}
+.kpi:first-child{border-left:0}
+.kpi:hover{background:#1b2330}
+.kpi:focus-visible{outline-offset:-4px}
+.kpi[aria-pressed=true]{background:rgba(74,168,255,.14)}
+.kpi[aria-pressed=true]::after{content:"";position:absolute;left:14px;right:14px;bottom:0;height:4px;border-radius:4px 4px 0 0;background:var(--accent)}
+.kl{display:block;color:var(--muted);font-size:.92rem;line-height:1.25}
+.kpi[aria-pressed=true] .kl{color:var(--text)}
+.kv{display:block}
+.kv strong{font-size:2rem;line-height:1.25}
+.kv small{color:var(--muted);font-size:.82rem;margin-left:8px}
+@media(max-width:1100px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi{border-left:0;border-top:1px solid var(--line)}.kpi:nth-child(odd){border-right:1px solid var(--line)}.kpi:last-child{grid-column:1/-1;border-right:0}}
+.belowmap{display:block}
+.monthsrow{position:relative;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding-right:14px}
+.monthsrow .months{border-bottom:0;flex:1;min-width:0;gap:4px;padding-right:0}
+.monthsrow .months button{padding:6px 9px}
+.datewrap{display:flex;align-items:center;gap:10px;flex:none;color:var(--muted)}
+.datewrap button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:#1d2634;color:var(--text);cursor:pointer;display:grid;place-items:center;padding:0}
+.datewrap button[aria-expanded=true]{background:var(--accent);border-color:var(--accent);color:#07121f}
+#cal{position:absolute;right:14px;top:calc(100% + 6px);z-index:8;width:320px;max-width:calc(100% - 28px);box-shadow:0 14px 34px rgba(0,0,0,.6)}
+.calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.calhead h2{margin:0}
+.calhead button{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:#1d2634;color:var(--text);cursor:pointer}
+.calwd,.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.calwd{margin-bottom:4px;text-align:center;color:var(--muted);font-size:.72rem}
+.calgrid button{height:36px;padding:0;border-radius:8px;border:1px solid var(--line);background:#1d2634;color:var(--text);cursor:pointer}
+.calgrid button:hover{background:#27344a}
+.calgrid button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#07121f;font-weight:700}
+.calsel{margin-top:10px;font-weight:700;font-size:.9rem}
+.opt input:disabled{opacity:.6}
+.act.undoOnly .dose,.act.undoOnly .irr button:not(.ghost){display:none}
+.act.undoOnly .irr .ghost{flex:1}
+.care{padding:12px 14px;min-width:0}
+.act{padding:12px 0 6px;border-top:1px solid var(--line)}
+.act.first{border-top:0;padding-top:4px}
+#careNone{margin:8px 0 2px;font-weight:700;color:#9fe0b0}
+.act h3{margin:0 0 6px;font-size:1rem}
+.sug{margin:0 0 10px;padding:8px 10px;font-size:.88rem;line-height:1.4;color:var(--text);background:#1b2330;border-left:3px solid var(--accent);border-radius:6px}
+.sug b{color:#fff;font-weight:700;background:rgba(74,168,255,.2);padding:0 4px;border-radius:4px;white-space:nowrap}
+.sug.warn{color:#ffb36b;border-left-color:#ffb36b}
+.sug.warn b{color:#fff;background:rgba(255,179,107,.25)}
+.dose{display:grid;grid-template-columns:1fr auto;grid-template-areas:"l o" "i i";align-items:center;gap:2px 8px;margin:0 0 10px}
+.dose label{grid-area:l;color:var(--muted);font-size:.85rem}
+.dose input{grid-area:i;width:100%;accent-color:var(--accent);height:24px;margin:0}
+.dose output{grid-area:o;text-align:right;font-weight:700;font-size:.85rem}
+.care .irrmsg{margin:8px 0 4px;font-size:.85rem}
+.sfsafra{color:var(--muted);font-size:.85rem}
+.sfname{font-size:1.2rem;font-weight:700;line-height:1.3}
+.sfsub{margin:2px 0 10px;color:var(--muted);font-size:.88rem;line-height:1.4}
+.sfstrip{display:flex;gap:2px}
+.sfstrip span{flex:1;height:26px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#07121f}
+.sfstrip .cur{outline:2px solid #fff;outline-offset:1px}
+</style>
+</head>
+<body>
+<header>
+ <div class="panel bar">
+  <div class="kcap" id="kCap"></div>
+  <div class="kpis" role="group" aria-label="Escolher qual mapa mostrar">
+   <button type="button" class="kpi" data-mode="soil" aria-pressed="true"><span class="kl">Umidade média do solo</span><span class="kv"><strong id="kAvg"></strong><small>mapa todo</small></span></button>
+   <button type="button" class="kpi" data-mode="dry" aria-pressed="false"><span class="kl">Precisam de irrigação</span><span class="kv"><strong id="kDry" style="color:#ffa63d"></strong><small>abaixo de 17 mm</small></span></button>
+   <button type="button" class="kpi" data-mode="wet" aria-pressed="false"><span class="kl">Água demais</span><span class="kv"><strong id="kWet" style="color:#ff5a5a"></strong><small>acima de 27 mm</small></span></button>
+   <button type="button" class="kpi" data-mode="pest" aria-pressed="false"><span class="kl">Alertas de pragas e doenças</span><span class="kv"><strong id="kAlert"></strong><small>no mapa todo</small></span></button>
+   <button type="button" class="kpi" data-mode="cross" aria-pressed="false"><span class="kl">Cruzamento geral</span><span class="kv"><strong id="kOk" style="color:#5ee0a0"></strong><small>tudo certo</small></span></button>
+  </div>
+ </div>
+</header>
+<main>
+  <div class="left">
+  <div class="maprow">
+    <div class="sidecards">
+      <div class="panel card">
+        <h2>Folha (ilustrativo)</h2>
+        <div class="leafwrap"><canvas id="leaf"></canvas><p id="leafTxt"></p></div>
+      </div>
+      <div class="panel card">
+        <h2 id="chTitle">Indicador mensal</h2>
+        <div class="chmonth" id="chMonth"></div>
+        <canvas id="chM"></canvas>
+        <div class="legend"><span><i style="background:#4aa8ff"></i>Solo (mm)</span><span><i style="background:#ffa63d"></i>Chuva (mm)</span><span><i style="background:#5ee0a0"></i>Umidade do ar (%)</span></div>
+      </div>
+      <div class="panel card" id="safra">
+        <h2>Período da safra</h2>
+        <div class="sfsafra" id="sfSafra"></div>
+        <div class="sfname" id="sfName"></div>
+        <div class="sfsub" id="sfSub"></div>
+        <div class="sfstrip" id="sfStrip" role="img" aria-label="Fase da safra em cada mês do ano"></div>
+        <div class="legend" id="sfLegend"></div>
+      </div>
+    </div>
+  <div class="mapcol">
+  <section class="panel">
+    <div class="monthsrow">
+      <div class="months" id="months" role="group" aria-label="Escolher o mês"></div>
+      <div class="datewrap">
+        <button id="calBtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="cal" aria-label="Abrir calendário para escolher o dia" title="Calendário"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></button>
+      </div>
+      <div class="panel card" id="cal" role="dialog" aria-label="Calendário" hidden>
+        <div class="calhead"><h2 id="calTitle"></h2><button id="calClose" type="button" aria-label="Fechar calendário">✕</button></div>
+        <div class="calwd" aria-hidden="true"><span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span></div>
+        <div class="calgrid" id="calGrid" role="group" aria-label="Escolher o dia"></div>
+        <div class="calsel" id="calSel" aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="stage">
+      <canvas id="base"></canvas>
+      <canvas id="ov" tabindex="0" aria-label="Mapa de umidade. Use as setas do teclado para mover o ponteiro."></canvas>
+      <div class="confirm" id="confirm" role="alertdialog" aria-modal="true" aria-labelledby="cfTitle" aria-describedby="cfText" hidden>
+        <div class="box">
+          <h3 id="cfTitle">Deseja realmente irrigar aqui?</h3>
+          <p id="cfText"></p>
+          <div class="actions"><button type="button" id="cfCancel">Cancelar</button><button type="button" id="cfOk" class="danger">Irrigar até o limite</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="controls"><button id="autoRot" aria-label="Girar automaticamente" aria-pressed="false">⟳</button><input id="rot" type="range" min="0" max="360" step="1" value="0" aria-label="Rotação do mapa"><output id="rotLabel">0°</output></div>
+  </section>
+  <div class="belowmap">
+    <div class="panel card">
+      <label class="opt"><input type="checkbox" id="optPests"><span>Mostrar pragas e folhas infectadas (opcional)</span></label>
+      <div id="pestBody" hidden>
+        <div class="layers">
+          <label><input type="checkbox" id="lyPest" checked>Pragas (losango vermelho)<b id="nPest">0</b></label>
+          <label><input type="checkbox" id="lyLeaf" checked>Folhas infectadas (folha marrom)<b id="nLeaf">0</b></label>
+        </div>
+        <ul class="alerts" id="alerts"></ul>
+        <div class="detail" id="alertDetail" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+  </div>
+  </div>
+  </div>
+  <aside>
+    <div class="panel card care">
+      <h2>Cuidados do ponto</h2>
+      <p class="irrmsg" id="careNone" hidden>Nenhum cuidado necessário neste ponto.</p>
+      <div class="act">
+        <h3>💧 Irrigação</h3>
+        <p class="sug" id="irrSug"></p>
+        <div class="dose"><label for="irrLvl">Quantidade</label><input type="range" id="irrLvl" min="50" max="150" step="5" value="100"><output id="irrLvlO" for="irrLvl">100%</output></div>
+        <div class="irr"><button id="irrBtn" type="button">💧 Irrigar este ponto</button><button id="irrReset" type="button" class="ghost">Desfazer</button></div>
+        <div class="irrmsg" id="irrMsg" aria-live="polite"></div>
+      </div>
+      <div class="act">
+        <h3>🌱 Adubação</h3>
+        <p class="sug" id="nutSug"></p>
+        <div class="dose"><label for="nutLvl">Quantidade</label><input type="range" id="nutLvl" min="50" max="150" step="5" value="100"><output id="nutLvlO" for="nutLvl">100%</output></div>
+        <div class="irr"><button id="nutBtn" type="button">🌱 Solicitar adubação</button><button id="nutReset" type="button" class="ghost">Desfazer</button></div>
+        <div class="irrmsg" id="nutMsg" aria-live="polite"></div>
+      </div>
+      <div class="act">
+        <h3>🛡️ Defensivos</h3>
+        <p class="sug" id="defSug"></p>
+        <div class="dose"><label for="defLvl">Quantidade</label><input type="range" id="defLvl" min="50" max="150" step="5" value="100"><output id="defLvlO" for="defLvl">100%</output></div>
+        <div class="irr"><button id="defBtn" type="button">🛡️ Aplicar defensivo</button><button id="defReset" type="button" class="ghost">Desfazer</button></div>
+        <div class="irrmsg" id="defMsg" aria-live="polite"></div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script>
+(function () {
+  var N = 100, M = 9, day = 9, T = 1.6, mapMode = 'soil', prevOpt = false;
+  var MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  var DIM = [31,28,31,30,31,30,31,31,30,31,30,31];
+  var DRY = 0.28, LOW = 0.45, EXCESS = 0.72, MAXMM = 38, FF = '"Atkinson Hyperlegible",system-ui,sans-serif';
+  var $ = function (id) { return document.getElementById(id); };
+  var stops = [[0,[214,48,39]],[0.2,[244,130,40]],[0.4,[238,214,60]],[0.58,[110,190,70]],[0.75,[40,140,200]],[0.9,[30,70,170]],[1,[14,22,80]]];
+  function cmap(f) {
+    for (var i = 1; i < stops.length; i++) if (f <= stops[i][0]) {
+      var a = stops[i-1], b = stops[i], k = (f - a[0]) / (b[0] - a[0]);
+      return [0,1,2].map(function (c) { return a[1][c] + (b[1][c] - a[1][c]) * k; });
+    }
+    return stops[stops.length-1][1];
+  }
+  function cl(x) { return Math.max(0, Math.min(255, Math.round(x))); }
+  function rgb(c, m) { m = m || 1; return 'rgb(' + cl(c[0]*m) + ',' + cl(c[1]*m) + ',' + cl(c[2]*m) + ')'; }
+  function tint(f) { var c = cmap(f); return rgb(c.map(function (x) { return x + (255 - x) * 0.45; })); }
+  function gauss(u, v, cu, cv, s) { return Math.exp(-(((u-cu)*(u-cu) + (v-cv)*(v-cv)) / (2*s*s))); }
+  function clamp(x) { return Math.max(0, Math.min(1, x)); }
+
+  // Umidade simulada (0 seco, 1 úmido). Troque por dados reais.
+  function field(u, v, t) {
+    var w = Math.cos(2*Math.PI*(M-0.5)/12), tt = t + M*1.7;
+    return clamp(0.48 + 0.14*w + 0.16*Math.sin(3.1*u+1.7+0.5*tt)*Math.cos(2.6*v+0.4*tt)
+      + 0.12*Math.sin(5.3*u+4.1*v+1.3-0.4*tt)
+      + (0.30+0.12*w)*gauss(u,v,0.30+0.10*Math.sin(M*0.9)+0.03*Math.sin(t),0.38+0.08*Math.cos(M*0.7),0.11)
+      - (0.26-0.10*w)*gauss(u,v,0.72-0.08*Math.cos(M*0.8),0.58,0.09)
+      + 0.20*gauss(u,v,0.55,0.20+0.10*Math.sin(M),0.07)
+      + 0.045*Math.sin(17*u+9*v+0.8*tt)*Math.cos(13*v-7*u+0.6*tt) + 0.028*Math.sin(31*u-23*v+1.3*tt));
+  }
+  function status(f) { return f >= EXCESS ? { label:'Excesso de umidade' } : f <= DRY ? { label:'Solo seco' } : { label:'Umidade adequada' }; }
+  function optOn() { return $('optPests').checked || mapMode === 'pest'; }
+
+  // Irrigação: cada ponto soma uma mancha de umidade que cresce aos poucos.
+  var IRR_MS = 8000, TARGET = 0.60, IRR_R = 0.14;
+  var irr = [], irrigating = false, irrLoop = false, irrNotice = '';
+  function snapIrr() {
+    var now = performance.now();
+    irr.forEach(function (s) {
+      if (s.stopped) { s.p = 1; s.amp = s.stopAmp; return; }
+      s.p = Math.min(1, (now - s.t0) / IRR_MS);
+      s.amp = s.A * (1 - (1 - s.p) * (1 - s.p));
+    });
+  }
+  function fieldI(u, v, t) {
+    var f = field(u, v, t);
+    for (var k = 0; k < irr.length; k++) f += irr[k].amp * gauss(u, v, irr[k].u, irr[k].v, IRR_R);
+    return clamp(f);
+  }
+  var pending = null;
+  function previewIrr(u, v) {
+    snapIrr();
+    var A = Math.max(0.15, TARGET - fieldI(u, v, T)) * dose('irrLvl'), cells = [];
+    for (var i = 0; i < N; i++) for (var j = 0; j < N; j++) {
+      var uu = (i+0.5)/N, vv = (j+0.5)/N, add = A * gauss(uu, vv, u, v, IRR_R);
+      if (add < 0.01) continue;
+      var now = fieldI(uu, vv, T);
+      if (now + add >= EXCESS && (now < EXCESS || add >= 0.03)) cells.push([i, j]);
+    }
+    return { cells: cells };
+  }
+
+  // Pragas e folhas infectadas (simuladas)
+  var PRAGAS = ['Pulgão','Ácaro-rajado','Mosca-branca','Lagarta-do-cartucho','Cochonilha','Tripes','Broca'];
+  var DOENCAS = ['Mancha foliar','Ferrugem','Oídio','Antracnose','Mofo-cinzento','Míldio','Podridão'];
+  var markers = [], selId = null;
+  function rng(seed) {
+    var a = seed >>> 0;
+    return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function spaced(list, max, d) {
+    var out = [];
+    list.forEach(function (c) { if (out.length < max && out.every(function (o) { return Math.hypot(o.u-c.u, o.v-c.v) >= d; })) out.push(c); });
+    return out;
+  }
+  function buildMarkers() {
+    var r = rng(M*7919+13), cand = [], k;
+    for (k = 0; k < 400; k++) { var u = 0.06+r()*0.88, v = 0.06+r()*0.88; cand.push({ u:u, v:v, f:field(u,v,3) }); }
+    var dry = cand.filter(function (c) { return c.f < 0.45; }).sort(function (a,b) { return a.f - b.f; });
+    var wet = cand.filter(function (c) { return c.f > 0.55; }).sort(function (a,b) { return b.f - a.f; });
+    function mk(list, type, names) { return spaced(list, 7, 0.13).map(function (c, i) { return { id:type+i, type:type, u:c.u, v:c.v, name:names[i % names.length], sev:0, f:0, vis:false }; }); }
+    markers = mk(dry, 'pest', PRAGAS).concat(mk(wet, 'leaf', DOENCAS));
+  }
+  function updateMarkers() {
+    var sp = $('lyPest').checked, sl = $('lyLeaf').checked;
+    markers.forEach(function (m) {
+      var f = fieldI(m.u, m.v, T); m.f = f;
+      m.sev = m.type === 'pest' ? clamp((0.55-f)/0.4) : clamp((f-0.45)/0.35);
+      m.sev = clamp(m.sev - appSum('def', m.u, m.v)); m.vis = optOn() && m.sev >= 0.15 && (m.type === 'pest' ? sp : sl);
+    });
+    if (selId && !markers.some(function (m) { return m.id === selId && m.vis; })) selId = null;
+  }
+  function sevLabel(s) { return s < 0.4 ? 'baixa' : s < 0.7 ? 'média' : 'alta'; }
+  function stemH(W) { return Math.max(26, W * 0.04); }
+  function markerAt(e) {
+    var r = ov.getBoundingClientRect(), g = geom(r.width, r.height), h0 = stemH(r.width), px = e.clientX-r.left, py = e.clientY-r.top, best = null, bd = 1e9;
+    markers.forEach(function (m) {
+      if (!m.vis) return;
+      var P = proj(g, m.u, m.v), d = Math.min(Math.hypot(px-P.x, py-(P.y-h0)), Math.hypot(px-P.x, py-P.y));
+      if (d < 24 && d < bd) { bd = d; best = m; }
+    });
+    return best;
+  }
+  function selectMarker(m) { selId = m.id; pin.u = m.u; pin.v = m.v; schedule(false); }
+  function drawMarker(ctx, m, P, h0) {
+    var pest = m.type === 'pest', col = pest ? '#ff3b3b' : '#8b4a2b', rim = pest ? '#fff' : '#f0c890', r = 8 + 5*m.sev, hy = P.y - h0;
+    ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.ellipse(P.x, P.y, 9, 4.5, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(P.x, P.y); ctx.lineTo(P.x, hy); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(P.x, P.y); ctx.lineTo(P.x, hy); ctx.stroke();
+    ctx.fillStyle = col; ctx.strokeStyle = rim; ctx.lineWidth = 2.5; ctx.beginPath();
+    if (pest) { ctx.moveTo(P.x, hy-r); ctx.lineTo(P.x+r, hy); ctx.lineTo(P.x, hy+r); ctx.lineTo(P.x-r, hy); ctx.closePath(); }
+    else ctx.ellipse(P.x, hy, r*1.25, r*0.75, -0.7, 0, 7);
+    ctx.fill(); ctx.stroke();
+    if (m.id === selId) { ctx.strokeStyle = '#ffb000'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(P.x, hy, r+8, 0, 7); ctx.stroke(); }
+  }
+
+  var lastSig = '';
+  function updateAlertsUI() {
+    var avail = markers.filter(function (m) { return m.sev >= 0.15; });
+    $('nPest').textContent = avail.filter(function (m) { return m.type === 'pest'; }).length;
+    $('nLeaf').textContent = avail.filter(function (m) { return m.type === 'leaf'; }).length;
+    var vis = markers.filter(function (m) { return m.vis; }).sort(function (a,b) { return b.sev - a.sev; });
+    var sig = vis.map(function (m) { return m.id + sevLabel(m.sev); }).join(',') + '|' + selId;
+    if (sig !== lastSig) {
+      lastSig = sig;
+      var ul = $('alerts'); ul.textContent = '';
+      vis.forEach(function (m) {
+        var li = document.createElement('li'), b = document.createElement('button');
+        b.type = 'button'; if (m.id === selId) b.setAttribute('aria-current', 'true');
+        b.textContent = (m.type === 'pest' ? '◆ ' : '🍂 ') + m.name + ' — gravidade ' + sevLabel(m.sev);
+        b.addEventListener('click', function () { selectMarker(m); });
+        li.appendChild(b); ul.appendChild(li);
+      });
+    }
+    var sel = markers.filter(function (m) { return m.id === selId; })[0], det = $('alertDetail');
+    det.textContent = sel
+      ? sel.name + ' (' + (sel.type === 'pest' ? 'praga' : 'folha infectada') + '), gravidade ' + sevLabel(sel.sev) + '\nSolo aqui: ' + Math.round(sel.f*MAXMM) + ' mm\n' + (sel.type === 'pest' ? 'Costuma aparecer em área seca: vigie e considere controle biológico.' : 'O excesso de água favorece fungos: reduza a irrigação e melhore a ventilação.')
+      : (vis.length ? 'Toque em um marcador no mapa ou na lista para ver os detalhes.' : 'Nenhum alerta para este dia e estes filtros.');
+  }
+
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  function setup(cv) {
+    var r = cv.getBoundingClientRect(), w = Math.max(1, r.width), h = Math.max(1, r.height);
+    if (cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)) { cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr); }
+    var ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx:ctx, w:w, h:h };
+  }
+  function geom(W, H) { var hw = W*0.40; return { hw:hw, hh:hw*0.46, ox:W*0.5, oy:H*0.30, d:H*0.05 }; }
+  var ang = 0, rotating = false;
+  function proj(g, u, v) {
+    var du = u-0.5, dv = v-0.5, c = Math.cos(ang), s = Math.sin(ang), ru = du*c - dv*s, rv = du*s + dv*c;
+    return { x:g.ox + (ru-rv)*g.hw, y:g.oy + g.hh + (ru+rv)*g.hh };
+  }
+  function unproj(g, x, y) {
+    var a = (x-g.ox)/g.hw, b = (y-g.oy-g.hh)/g.hh, ru = (a+b)/2, rv = (b-a)/2, c = Math.cos(ang), s = Math.sin(ang);
+    return { u:ru*c + rv*s + 0.5, v:-ru*s + rv*c + 0.5 };
+  }
+
+  var base = $('base'), ov = $('ov'), pin = { u:0.30, v:0.38 }, grid = new Float32Array(N*N), rk = new Float32Array(N*N), pm = new Uint8Array(N*N);
+  function computeGrid() {
+    for (var i = 0; i < N; i++) for (var j = 0; j < N; j++) {
+      var idx = i*N+j, u = (i+0.5)/N, v = (j+0.5)/N, f = fieldI(u, v, T);
+      var r = clamp(Math.max(clamp((0.55-f)/0.4), clamp((f-0.45)/0.35)) - appSum('def', u, v));
+      grid[idx] = f; rk[idx] = r;
+      pm[idx] = ((f < LOW || f >= EXCESS) ? 1 : 0) | (nutAt(u, v) < NUT_NEED ? 2 : 0) | (r >= RISK_NEED ? 4 : 0);
+    }
+  }
+  // Cores de cada mapa
+  var MUTED = [48, 62, 78], CROSSC = [[46,196,98],[240,200,60],[244,130,40],[214,48,39]], POP = [0,1,1,2,1,2,2,3];
+  var DRYC = [[255,214,74],[205,40,36]], WETC = [[255,170,170],[168,20,60]], RISKC = [214,52,190];
+  function mix(a, b, k) { k = clamp(k); return [a[0]+(b[0]-a[0])*k, a[1]+(b[1]-a[1])*k, a[2]+(b[2]-a[2])*k]; }
+  function cellRGB(idx) {
+    var f = grid[idx];
+    if (mapMode === 'dry') return f < LOW ? mix(DRYC[0], DRYC[1], (LOW-f)/LOW) : MUTED;
+    if (mapMode === 'wet') return f >= EXCESS ? mix(WETC[0], WETC[1], (f-EXCESS)/(1-EXCESS)) : MUTED;
+    if (mapMode === 'pest') return mix(MUTED, RISKC, rk[idx]);
+    if (mapMode === 'cross') return CROSSC[POP[pm[idx]]];
+    return cmap(f);
+  }
+  function pinIdx() { return Math.min(N-1, Math.floor(pin.u*N))*N + Math.min(N-1, Math.floor(pin.v*N)); }
+  function lighter(c) { return rgb(c.map(function (x) { return x + (255 - x)*0.4; })); }
+  function pinInfo(f) {
+    var idx = pinIdx(), mm = Math.round(f*MAXMM), ok = '#b8e08a';
+    if (mapMode === 'dry') return f < LOW ? { t:'Precisa de irrigação', s:'Mínimo ' + Math.round(LOW*MAXMM) + ' mm', c:'#ffb36b' } : { t:'Não precisa irrigar', s:'', c:ok };
+    if (mapMode === 'wet') return f >= EXCESS ? { t:'Água demais', s:'Limite ' + Math.round(EXCESS*MAXMM) + ' mm', c:'#ff8a8a' } : { t:'Sem excesso de água', s:'', c:ok };
+    if (mapMode === 'pest') { var r = rk[idx]; return { t:'Risco ' + (r < 0.15 ? 'baixo' : r < 0.5 ? 'médio' : 'alto'), s:'', c:r < 0.15 ? ok : r < 0.5 ? '#ffd27a' : '#ff8a8a' }; }
+    if (mapMode === 'cross') {
+      var m = pm[idx], names = [];
+      if (m & 1) names.push(f < LOW ? 'irrigação' : 'excesso de água'); if (m & 2) names.push('adubação'); if (m & 4) names.push('defensivos');
+      return names.length ? { t:POP[m] + (POP[m] === 1 ? ' pendência' : ' pendências'), s:'Falta: ' + names.join(' · '), c:lighter(CROSSC[POP[m]]) } : { t:'Tudo certo', s:'Irrigação, adubação e defensivos ok', c:'#7dffa8' };
+    }
+    return { t:status(f).label, s:'', c:tint(f) };
+  }
+  function drawLegend(ctx, W, H, lf) {
+    var lx = 16, lw = Math.min(190, Math.max(W*0.26, 120)), ly = H - 44, g, a, b, extra = null, sw = W < 600 ? 12 : 16;
+    ctx.font = lf + 'px ' + FF; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    if (mapMode === 'cross') {
+      [['Tudo certo',0],['1 pendência',1],['2 pendências',2],['3 pendências',3]].forEach(function (it, n) {
+        var small = W < 600, cw = Math.min(W*0.42, 125), x = small ? lx + (n % 2)*cw : lx, y = small ? H - 14 - (1 - (n >> 1))*(sw+6) : H - 20 - (3-n)*24;
+        ctx.fillStyle = rgb(CROSSC[it[1]]); ctx.fillRect(x, y-sw/2, sw, sw);
+        ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1; ctx.strokeRect(x, y-sw/2, sw, sw);
+        ctx.fillStyle = '#e8efe9'; ctx.fillText(it[0], x+sw+6, y);
+      });
+      return;
+    }
+    g = ctx.createLinearGradient(lx, 0, lx+lw, 0);
+    if (mapMode === 'dry') { g.addColorStop(0, rgb(DRYC[0])); g.addColorStop(1, rgb(DRYC[1])); a = 'Pouco seco'; b = 'Muito seco'; extra = 'Sem necessidade'; }
+    else if (mapMode === 'wet') { g.addColorStop(0, rgb(WETC[0])); g.addColorStop(1, rgb(WETC[1])); a = 'Excesso leve'; b = 'Forte'; extra = 'Sem excesso'; }
+    else if (mapMode === 'pest') { g.addColorStop(0, rgb(MUTED)); g.addColorStop(1, rgb(RISKC)); a = 'Risco baixo'; b = 'Risco alto'; }
+    else { stops.forEach(function (sp) { g.addColorStop(sp[0], rgb(sp[1])); }); a = 'Seco'; b = 'Úmido'; }
+    if (extra) { ctx.fillStyle = rgb(MUTED); ctx.fillRect(lx, ly-24, 14, 14); ctx.fillStyle = '#e8efe9'; ctx.fillText(extra, lx+22, ly-17); }
+    ctx.fillStyle = g; ctx.fillRect(lx, ly, lw, 12);
+    ctx.fillStyle = '#e8efe9'; ctx.textBaseline = 'top'; ctx.textAlign = 'left'; ctx.fillText(a, lx, ly+16); ctx.textAlign = 'right'; ctx.fillText(b, lx+lw, ly+16);
+  }
+  function appBusy() { return apps.some(function (a) { return a.p < 1; }); }
+
+  function drawBase() {
+    var s = setup(base), ctx = s.ctx, W = s.w, H = s.h, g = geom(W, H), st = (rotating || irrigating || appBusy()) ? 2 : 1;
+    var c = Math.cos(ang), sn = Math.sin(ang), i, j, k, p1, p2, rel = mapMode === 'soil' ? [2.2, 0.72, 1.28] : mapMode === 'cross' ? [0, 1, 1] : [0.9, 0.88, 1.12];
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(160,190,170,.12)'; ctx.lineWidth = 1;
+    for (k = -4; k <= 12; k++) {
+      var t0 = k/8, f1 = proj(g,t0,-0.5), f2 = proj(g,t0,1.5), f3 = proj(g,-0.5,t0), f4 = proj(g,1.5,t0);
+      ctx.beginPath(); ctx.moveTo(f1.x, f1.y+g.d); ctx.lineTo(f2.x, f2.y+g.d); ctx.moveTo(f3.x, f3.y+g.d); ctx.lineTo(f4.x, f4.y+g.d); ctx.stroke();
+    }
+    var E = [[0,1],[1,0],[0,-1],[-1,0]];
+    for (var e = 0; e < 4; e++) {
+      var nu = E[e][0]*c - E[e][1]*sn, nv = E[e][0]*sn + E[e][1]*c;
+      if (nu + nv < 0.02) continue;
+      var sh = Math.max(0.5, Math.min(0.95, 0.72 + 0.12*(nu-nv)));
+      for (k = 0; k < N; k += st) {
+        var k2 = Math.min(N, k+st), ia, ja, ua, va, ub, vb;
+        if (e === 0) { ia = k; ja = N-1; ua = k/N; va = 1; ub = k2/N; vb = 1; }
+        else if (e === 1) { ia = N-1; ja = k; ua = 1; va = k/N; ub = 1; vb = k2/N; }
+        else if (e === 2) { ia = k; ja = 0; ua = k/N; va = 0; ub = k2/N; vb = 0; }
+        else { ia = 0; ja = k; ua = 0; va = k/N; ub = 0; vb = k2/N; }
+        p1 = proj(g, ua, va); p2 = proj(g, ub, vb);
+        ctx.fillStyle = rgb(cellRGB(ia*N+ja), sh); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p2.x, p2.y+g.d); ctx.lineTo(p1.x, p1.y+g.d); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    }
+    for (i = 0; i < N; i += st) {
+      var i2 = Math.min(N, i+st);
+      for (j = 0; j < N; j += st) {
+        var j2 = Math.min(N, j+st), pa = proj(g,i/N,j/N), pb = proj(g,i2/N,j/N), pc = proj(g,i2/N,j2/N), pd = proj(g,i/N,j2/N);
+        var gu = (grid[Math.min(N-1,i+st)*N+j] - grid[Math.max(0,i-st)*N+j])/st, gv = (grid[i*N+Math.min(N-1,j+st)] - grid[i*N+Math.max(0,j-st)])/st;
+        var gr = (gu*c - gv*sn) + (gu*sn + gv*c);
+        ctx.fillStyle = rgb(cellRGB(i*N+j), Math.max(rel[1], Math.min(rel[2], 1 - gr*rel[0]))); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.lineTo(pc.x, pc.y); ctx.lineTo(pd.x, pd.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 0.8;
+    for (var q = 1; q < 10; q++) {
+      var rr = q/10, a1 = proj(g,rr,0), a2 = proj(g,rr,1), b1 = proj(g,0,rr), b2 = proj(g,1,rr);
+      ctx.beginPath(); ctx.moveTo(a1.x, a1.y); ctx.lineTo(a2.x, a2.y); ctx.moveTo(b1.x, b1.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
+    }
+    var c0 = proj(g,0,0), c1 = proj(g,1,0), c2 = proj(g,1,1), c3 = proj(g,0,1);
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(c0.x, c0.y); ctx.lineTo(c1.x, c1.y); ctx.lineTo(c2.x, c2.y); ctx.lineTo(c3.x, c3.y); ctx.closePath(); ctx.stroke();
+  }
+
+  function drawOverlay() {
+    var s = setup(ov), ctx = s.ctx, W = s.w, H = s.h, g = geom(W, H), P = proj(g, pin.u, pin.v);
+    var f = fieldI(pin.u, pin.v, T), info = pinInfo(f), pcol = rgb(cellRGB(pinIdx())), top = H*0.05, h0 = stemH(W), i;
+    ctx.clearRect(0, 0, W, H);
+    if (pending) {
+      ctx.fillStyle = 'rgba(255,60,60,.6)'; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 0.8;
+      pending.cells.forEach(function (c) {
+        var a = proj(g,c[0]/N,c[1]/N), b = proj(g,(c[0]+1)/N,c[1]/N), cc = proj(g,(c[0]+1)/N,(c[1]+1)/N), d = proj(g,c[0]/N,(c[1]+1)/N);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(cc.x, cc.y); ctx.lineTo(d.x, d.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+      });
+    }
+    var tn = performance.now();
+    irr.forEach(function (sr) {
+      if (sr.p >= 1) return;
+      var C = proj(g, sr.u, sr.v);
+      for (var kk = 0; kk < 3; kk++) {
+        var ph = ((tn/1100) + kk/3) % 1, rx = 8 + ph*g.hw*0.30;
+        ctx.strokeStyle = 'rgba(140,215,255,' + (0.85*(1-ph)).toFixed(2) + ')'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(C.x, C.y, rx, rx*0.5, 0, 0, 7); ctx.stroke();
+      }
+    });
+    markers.filter(function (m) { return m.vis; }).map(function (m) { return { m:m, P:proj(g, m.u, m.v) }; })
+      .sort(function (a,b) { return a.P.y - b.P.y; }).forEach(function (o) { drawMarker(ctx, o.m, o.P, h0); });
+    // legendas
+    var lf = W < 600 ? Math.max(10.5, W*0.03) : Math.max(14, Math.min(17, W*0.017)), rows = [['Praga',0],['Folha infectada',1]];
+    ctx.font = lf + 'px ' + FF; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    (optOn() ? rows : []).forEach(function (r, n) {
+      var y = H - 16 - (1-n)*26, x = W - 16;
+      ctx.fillStyle = r[1] === 0 ? '#ff3b3b' : r[1] === 1 ? '#8b4a2b' : '#7b3fd0'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath();
+      if (r[1] === 0) { ctx.moveTo(x, y-9); ctx.lineTo(x+9, y); ctx.lineTo(x, y+9); ctx.lineTo(x-9, y); ctx.closePath(); }
+      else ctx.arc(x, y, 8, 0, 7);
+      ctx.fill(); ctx.stroke(); ctx.fillStyle = '#e8efe9'; ctx.fillText(r[0], x-18, y);
+    });
+    drawLegend(ctx, W, H, lf);
+    // ponteiro
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(P.x, P.y, 18, 9, 0, 0, 7); ctx.stroke();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(P.x, P.y); ctx.lineTo(P.x, top); ctx.stroke();
+    ctx.strokeStyle = pcol; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(P.x, P.y); ctx.lineTo(P.x, top); ctx.stroke();
+    ctx.fillStyle = pcol; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(P.x, P.y, 9, 0, 7); ctx.fill(); ctx.stroke();
+    var small = W < 600, big = small ? Math.max(15, W*0.045) : Math.max(18, Math.min(28, W*0.028)), sm = small ? Math.max(10.5, W*0.03) : Math.max(13, Math.min(17, W*0.016)), pad = 8;
+    var nut = nutAt(pin.u, pin.v), rsk = riskAt(pin.u, pin.v), lines = [];
+    if (info.s) lines.push([info.s, '#fff']);
+    lines.push(['Solo ' + Math.round(f*MAXMM) + ' mm  ·  Ar ' + Math.round(30+f*60) + '%', '#fff']);
+    if (mapMode !== 'soil') lines.push(['Situação: ' + status(f).label, '#fff']);
+    lines.push(['Nutrientes ' + Math.round(nut*100) + '%  ·  Risco de pragas ' + Math.round(rsk*100) + '%', '#fff']);
+    lines.push(['Lat ' + (14.50 + (1-pin.v)*0.5).toFixed(4) + '  ·  Lon ' + (106.80 + pin.u*0.5).toFixed(4) + ' (simulado)', '#c3d0de']);
+    ctx.font = '700 ' + big + 'px ' + FF; var wmax = ctx.measureText(info.t).width;
+    ctx.font = sm + 'px ' + FF; lines.forEach(function (l) { wmax = Math.max(wmax, ctx.measureText(l[0]).width); });
+    var kf = Math.min(1, (W - 16 - pad*2)/wmax); big *= kf; sm *= kf; wmax *= kf;
+    var left = P.x > W*0.6, tx = P.x + (left ? -14 : 14), bw = wmax + pad*2, bh = pad*2 + big + 4 + lines.length*(sm+4) - 4;
+    var bx = Math.max(8, Math.min(W - bw - 8, left ? tx - bw : tx)), by = top - 8;
+    ctx.fillStyle = 'rgba(10,14,20,.78)'; ctx.beginPath(); ctx.moveTo(bx+8, by); ctx.arcTo(bx+bw, by, bx+bw, by+bh, 8); ctx.arcTo(bx+bw, by+bh, bx, by+bh, 8); ctx.arcTo(bx, by+bh, bx, by, 8); ctx.arcTo(bx, by, bx+bw, by, 8); ctx.closePath(); ctx.fill();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillStyle = info.c; ctx.font = '700 ' + big + 'px ' + FF; ctx.fillText(info.t, bx + pad, by + pad);
+    ctx.font = sm + 'px ' + FF;
+    lines.forEach(function (l, i) { ctx.fillStyle = l[1]; ctx.fillText(l[0], bx + pad, by + pad + big + 4 + i*(sm+4)); });
+  }
+
+  var spotPos = [[.30,.38],[.42,.55],[.55,.34],[.66,.52],[.36,.68],[.50,.62],[.72,.40],[.28,.52],[.60,.66],[.46,.42],[.68,.62],[.40,.30],[.54,.50],[.34,.60]];
+  function drawLeaf(f) {
+    var s = setup($('leaf')), ctx = s.ctx, W = s.w, H = s.h, risk = clamp((f-0.5)/0.5);
+    ctx.clearRect(0, 0, W, H); ctx.save(); ctx.translate(W/2, H/2);
+    ctx.fillStyle = risk > 0.5 ? '#6f9a38' : '#4f9a3a'; ctx.beginPath(); ctx.moveTo(-W*0.42, 0);
+    ctx.bezierCurveTo(-W*0.2, -H*0.55, W*0.2, -H*0.55, W*0.42, 0); ctx.bezierCurveTo(W*0.2, H*0.55, -W*0.2, H*0.55, -W*0.42, 0); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-W*0.42, 0); ctx.lineTo(W*0.42, 0); ctx.stroke();
+    ctx.fillStyle = '#6b2f44';
+    for (var i = 0, n = Math.round(risk*spotPos.length); i < n; i++) { ctx.beginPath(); ctx.arc((spotPos[i][0]-0.5)*W*0.8, (spotPos[i][1]-0.5)*H*0.7, 4 + (i%3)*1.5, 0, 7); ctx.fill(); }
+    ctx.restore();
+    $('leafTxt').textContent = 'Risco de manchas por fungo: ' + (risk > 0.66 ? 'alto' : risk > 0.25 ? 'médio' : 'baixo');
+  }
+
+  function drawCharts() {
+    var days = DIM[M], solo = [], chuva = [], ar = [], xl = [], w = (Math.cos(2*Math.PI*(M-0.5)/12)+1)/2, d;
+    for (d = 0; d < days; d++) {
+      var fd = field(pin.u, pin.v, d/(days-1)*6), rv = Math.max(0, Math.sin(d*1.9+M*3.1)*Math.sin(d*0.61+M));
+      solo.push(fd*MAXMM); chuva.push(Math.min(100, rv*rv*90*(0.25+0.75*w)*(0.5+fd))); ar.push(30+fd*60);
+      xl.push(d === 0 || (d+1) % 5 === 0 ? String(d+1) : '');
+    }
+    $('chMonth').textContent = MESES[M];
+    var s = setup($('chM')), ctx = s.ctx, w2 = s.w, h = s.h, pl = 44, pr = 12, pt = 10, pb = 30, iw = w2-pl-pr, ih = h-pt-pb;
+    ctx.clearRect(0, 0, w2, h); ctx.font = '14px ' + FF; ctx.fillStyle = '#b4c0cf'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    function Y(v) { return pt + ih - ih*v/100; }
+    for (var gI = 0; gI <= 4; gI++) {
+      var y = pt + ih - ih*gI/4; ctx.strokeStyle = 'rgba(139,152,169,.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pl, y); ctx.lineTo(w2-pr, y); ctx.stroke(); ctx.fillText(gI*25, pl-6, y);
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    xl.forEach(function (l, i) { if (l) ctx.fillText(l, pl + iw*i/(days-1), h-pb+6); });
+        [[solo,'#4aa8ff'],[chuva,'#ffa63d'],[ar,'#5ee0a0']].forEach(function (se) {
+      ctx.strokeStyle = se[1]; ctx.lineWidth = 3.5; ctx.beginPath();
+      se[0].forEach(function (v, i) { var x = pl + iw*i/(days-1); if (i) ctx.lineTo(x, Y(v)); else ctx.moveTo(x, Y(v)); });
+      ctx.stroke();
+    });
+    var mx = pl + iw*((day-1)/(days-1)); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, pt); ctx.lineTo(mx, pt+ih); ctx.stroke();
+  }
+
+  // Cuidados do ponto: irrigação, adubo e defensivo seguem a mesma lógica (sugestão, quantidade ajustável, botão e desfazer)
+  var apps = [], appLoop = false, APP_MS = 6000, APP_R = 0.14, NUT_REC = 0.70, NUT_NEED = 0.55, NUT_MAX = 0.80, RISK_REC = 0.15, RISK_NEED = 0.25;
+  function dose(id) { return +$(id).value / 100; }
+  function nutBase(u, v) { return clamp(0.55 + 0.18*Math.sin(4*u+2*M)*Math.cos(3.4*v-M) - 0.38*gauss(u,v,0.24,0.66,0.12) + 0.36*gauss(u,v,0.76,0.30,0.10)); }
+  function snapApps() { var now = performance.now(); apps.forEach(function (a) { a.p = Math.min(1, (now-a.t0)/APP_MS); a.amp = a.A*(1-(1-a.p)*(1-a.p)); }); }
+  function appSum(k, u, v) { var t = 0; apps.forEach(function (a) { if (a.k === k) t += a.amp*gauss(u, v, a.u, a.v, APP_R); }); return t; }
+  function nutAt(u, v) { return clamp(nutBase(u, v) + appSum('nut', u, v)); }
+  function riskAt(u, v) { var f = fieldI(u, v, T); return clamp(Math.max(clamp((0.55-f)/0.4), clamp((f-0.45)/0.35)) - appSum('def', u, v)); }
+  function apply(k) {
+    snapApps();
+    var n = nutAt(pin.u, pin.v), r = riskAt(pin.u, pin.v);
+    var A = k === 'nut' ? Math.max(0.1, NUT_REC - n) * dose('nutLvl') : Math.max(0.1, r - RISK_REC) * dose('defLvl');
+    if (apps.length >= 16) apps.shift();
+    apps.push({ k:k, u:pin.u, v:pin.v, A:A, t0:performance.now(), p:0, amp:0 });
+    if (!appLoop) { appLoop = true; requestAnimationFrame(appTick); }
+  }
+  function appTick() { snapApps(); if (mapMode === 'pest' || mapMode === 'cross') render(true); else { computeGrid(); render(false); } if (apps.some(function (a) { return a.p < 1; })) requestAnimationFrame(appTick); else appLoop = false; }
+  function lvl(id) { var d = dose(id); $(id + 'O').textContent = Math.round(d*100) + '%' + (d === 1 ? ' (recomendado)' : ''); return d; }
+  function care() {
+    var f = fieldI(pin.u, pin.v, T), n = nutAt(pin.u, pin.v), r = riskAt(pin.u, pin.v);
+    var di = lvl('irrLvl'), dn = lvl('nutLvl'), dd = lvl('defLvl');
+    // irrigação
+    var ci = Math.round(f*MAXMM), ai = Math.round(clamp(f + Math.max(0.15, TARGET - f)*di)*MAXMM), lim = Math.round(EXCESS*MAXMM);
+    $('irrSug').innerHTML = f >= LOW ? 'Hoje: <b>' + ci + ' mm</b>. <b>Já está úmido o suficiente.</b>' : 'Hoje: <b>' + ci + ' mm</b>. Vai subir para <b>' + ai + ' mm</b> (+' + (ai-ci) + ' mm), cerca de <b>' + ((ai-ci)*45) + ' litros</b> (estimado). Limite seguro: <b>' + lim + ' mm</b>.';
+    $('irrSug').className = 'sug' + (f < LOW && ai > lim ? ' warn' : '');
+    // adubo
+    var cn = Math.round(n*100), an = Math.round(clamp(n + Math.max(0.1, NUT_REC - n)*dn)*100);
+    $('nutSug').innerHTML = n >= NUT_NEED ? 'Hoje: <b>' + cn + '%</b> de nutrientes. <b>Já está adubado o suficiente.</b>' : 'Hoje: <b>' + cn + '%</b> de nutrientes. Vai subir para <b>' + an + '%</b> (+' + (an-cn) + ' pontos), cerca de <b>' + ((an-cn)*2) + ' kg/ha</b> (estimado). Limite seguro: <b>' + Math.round(NUT_MAX*100) + '%</b>.';
+    $('nutSug').className = 'sug' + (n < NUT_NEED && an > NUT_MAX*100 ? ' warn' : '');
+    // defensivo
+    var cr = Math.round(r*100), ar = Math.round(clamp(r - Math.max(0.1, r - RISK_REC)*dd)*100);
+    $('defSug').innerHTML = r < RISK_NEED ? 'Risco de pragas e doenças: <b>' + cr + '%</b>. <b>Não precisa de defensivo agora.</b>' : 'Risco de pragas e doenças: <b>' + cr + '%</b>. Vai cair para <b>' + ar + '%</b>, cerca de <b>' + ((cr-ar)*0.03).toFixed(1).replace('.', ',') + ' L/ha</b> (estimado).';
+    // botões e mensagens
+    var act = irr.filter(function (x) { return x.p < 1; }), m = $('irrMsg');
+    var busy = irr.some(function (x) { return x.p < 1 && Math.abs(x.u-pin.u) + Math.abs(x.v-pin.v) < 0.1; });
+    m.className = 'irrmsg' + (!act.length && irrNotice ? ' warn' : '');
+    $('irrBtn').disabled = f >= LOW || busy; $('irrReset').disabled = !irr.length;
+    m.textContent = act.length ? 'Irrigando… ' + Math.round(act[act.length-1].p*100) + '%' : irrNotice || (f >= LOW ? (irr.length ? 'Irrigação concluída. Solo com ' + ci + ' mm.' : 'Este ponto já está úmido o suficiente.') : 'Ponto com pouca umidade: você pode irrigar.');
+    function st(k, off, ing, done, no, yes) {
+      var ac = apps.filter(function (a) { return a.k === k && a.p < 1; }), all = apps.some(function (a) { return a.k === k; });
+      $(k + 'Btn').disabled = off || ac.some(function (a) { return Math.abs(a.u-pin.u) + Math.abs(a.v-pin.v) < 0.1; });
+      $(k + 'Reset').disabled = !all;
+      $(k + 'Msg').textContent = ac.length ? ing + '… ' + Math.round(ac[ac.length-1].p*100) + '%' : off ? (all ? done : no) : yes;
+    }
+    st('nut', n >= NUT_NEED, 'Adubação em andamento', 'Adubação concluída. Nutrientes em ' + cn + '%.', 'Este ponto já está adubado o suficiente.', 'Ponto com pouco adubo: você pode solicitar adubação.');
+    st('def', r < RISK_NEED, 'Aplicando defensivo', 'Defensivo aplicado. Risco em ' + cr + '%.', 'Sem risco relevante: não precisa de defensivo.', 'Risco alto aqui: você pode aplicar defensivo.');
+    // mostra só o que este ponto precisa (ou o que foi aplicado aqui perto, para dar para desfazer)
+    function near(a) { return Math.abs(a.u-pin.u) + Math.abs(a.v-pin.v) < 0.3; }
+    var need = { irr: f < LOW, nut: n < NUT_NEED, def: r >= RISK_NEED },
+        prog = { irr: irr.some(function (x) { return x.p < 1; }), nut: apps.some(function (a) { return a.k === 'nut' && a.p < 1; }), def: apps.some(function (a) { return a.k === 'def' && a.p < 1; }) };
+    var show = [
+      ['irr', need.irr || irr.some(near)],
+      ['nut', need.nut || apps.some(function (a) { return a.k === 'nut' && near(a); })],
+      ['def', need.def || apps.some(function (a) { return a.k === 'def' && near(a); })]
+    ], first = true;
+    show.forEach(function (x) {
+      var el = $(x[0] + 'Btn').closest('.act'), only = x[1] && !need[x[0]], mm = $(x[0] + 'Msg');
+      el.hidden = !x[1]; el.classList.toggle('first', x[1] && first); el.classList.toggle('undoOnly', only);
+      // aqui não precisa mais do cuidado: só dá para desfazer (sem botão de aplicar "travado")
+      if (only && !prog[x[0]]) mm.textContent += ' Use “Desfazer” para refazer.';
+      if (x[1]) first = false;
+    });
+    $('careNone').hidden = !first;
+  }
+
+  var FASES = {
+    prep: ['Preparo do solo', '#c9a56a', 'Hora de preparar o solo e corrigir a fertilidade antes do plantio.'],
+    plan: ['Plantio', '#5ee0a0', 'Semeadura e primeiras semanas: o solo precisa de umidade adequada.'],
+    desn: ['Desenvolvimento', '#4aa8ff', 'Plantas crescendo: acompanhe água, nutrientes e pragas.'],
+    colh: ['Colheita', '#ffa63d', 'Grãos maduros: o ideal é o solo estar seco para colher.'],
+    entr: ['Entressafra', '#98a5b6', 'Área em descanso entre uma safra e outra.']
+  };
+  var CICLO = ['desn','desn','colh','colh','entr','entr','entr','prep','prep','plan','desn','desn'], sfM = -1;
+  function drawSafra() {
+    var box = $('sfStrip'), i, f = FASES[CICLO[M]], ano = 2026;
+    if (!box.children.length) {
+      CICLO.forEach(function (c, k) { var e = document.createElement('span'); e.style.background = FASES[c][1]; e.textContent = MESES[k][0]; e.title = MESES[k] + ': ' + FASES[c][0]; box.appendChild(e); });
+      $('sfLegend').innerHTML = Object.keys(FASES).map(function (k) { return '<span><i style="background:' + FASES[k][1] + '"></i>' + FASES[k][0] + '</span>'; }).join('');
+    }
+    if (sfM === M) return;
+    sfM = M;
+    for (i = 0; i < 12; i++) box.children[i].classList.toggle('cur', i === M);
+    $('sfSafra').textContent = 'Safra ' + (M >= 8 ? ano + '/' + String(ano+1).slice(2) : (ano-1) + '/' + String(ano).slice(2)) + ' · ' + MESES[M];
+    $('sfName').textContent = f[0]; $('sfName').style.color = f[1]; $('sfSub').textContent = f[2];
+  }
+  function updatePanels() {
+    var f = fieldI(pin.u, pin.v, T);
+    drawLeaf(f); drawCharts(); drawSafra(); updateAlertsUI();
+    var sum = 0, dry = 0, wet = 0, okc = 0, n = grid.length, q;
+    for (q = 0; q < n; q++) { sum += grid[q]; if (grid[q] < LOW) dry++; if (grid[q] >= EXCESS) wet++; if (!pm[q]) okc++; }
+    $('kAvg').textContent = Math.round(sum/n*MAXMM) + ' mm'; $('kDry').textContent = Math.round(dry/n*100) + '%'; $('kWet').textContent = Math.round(wet/n*100) + '%'; $('kOk').textContent = Math.round(okc/n*100) + '%';
+    $('kAlert').textContent = markers.filter(function (m) { return m.sev >= 0.15; }).length;
+    $('kCap').textContent = 'Indicadores de ' + MESES[M].toLowerCase() + ', ' + dateStr() + ' · escolha qual mapa mostrar';
+    care();
+  }
+
+  var queued = false;
+  function render(full) { snapIrr(); snapApps(); updateMarkers(); if (full) { computeGrid(); drawBase(); } drawOverlay(); updatePanels(); }
+  function schedule(full) { if (queued && !full) return; queued = true; requestAnimationFrame(function () { queued = false; render(full); }); }
+
+  var rotSlider = $('rot');
+  function setAngle(a) {
+    ang = a; var deg = ((Math.round(a*180/Math.PI) % 360) + 360) % 360;
+    rotSlider.value = deg; $('rotLabel').textContent = deg + '°'; schedule(true);
+  }
+  function placeFromEvent(e) {
+    var r = ov.getBoundingClientRect(), q = unproj(geom(r.width, r.height), e.clientX-r.left, e.clientY-r.top);
+    pin.u = clamp(q.u); pin.v = clamp(q.v); schedule(false);
+  }
+  function nearPin(e) {
+    var r = ov.getBoundingClientRect(), P = proj(geom(r.width, r.height), pin.u, pin.v), dx = e.clientX-r.left-P.x, dy = e.clientY-r.top-P.y;
+    return dx*dx + dy*dy < 44*44;
+  }
+  var mode = null, sx0 = 0, sy0 = 0, ang0 = 0, hitM = null, auto = false;
+  ov.addEventListener('pointerdown', function (e) {
+    ov.setPointerCapture(e.pointerId); ov.focus({ preventScroll:true });
+    sx0 = e.clientX; sy0 = e.clientY; ang0 = ang; hitM = null;
+    if (nearPin(e)) mode = 'pin'; else { hitM = markerAt(e); mode = 'pending'; }
+  });
+  ov.addEventListener('pointermove', function (e) {
+    if (!mode) return;
+    if (mode === 'pin') { placeFromEvent(e); return; }
+    if (mode === 'pending' && Math.abs(e.clientX-sx0) + Math.abs(e.clientY-sy0) > 6) { mode = 'rot'; rotating = true; }
+    if (mode === 'rot') setAngle(ang0 + (e.clientX-sx0)*0.008);
+  });
+  function endPointer(e, cancel) {
+    if (mode === 'pending' && !cancel) { if (hitM) selectMarker(hitM); else placeFromEvent(e); }
+    if (mode === 'rot') { rotating = auto; schedule(true); }
+    mode = null;
+  }
+  ov.addEventListener('pointerup', function (e) { endPointer(e, false); });
+  ov.addEventListener('pointercancel', function (e) { endPointer(e, true); });
+  ov.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'q' || k === 'Q') { e.preventDefault(); setAngle(ang - 0.1); return; }
+    if (k === 'e' || k === 'E') { e.preventDefault(); setAngle(ang + 0.1); return; }
+    var st = e.shiftKey ? 0.06 : 0.02, dx = 0, dy = 0, r = ov.getBoundingClientRect(), g = geom(r.width, r.height);
+    if (k === 'ArrowLeft') dx = -2*st*g.hw; else if (k === 'ArrowRight') dx = 2*st*g.hw;
+    else if (k === 'ArrowUp') dy = -2*st*g.hh; else if (k === 'ArrowDown') dy = 2*st*g.hh; else return;
+    e.preventDefault();
+    var P = proj(g, pin.u, pin.v), q = unproj(g, P.x+dx, P.y+dy); pin.u = clamp(q.u); pin.v = clamp(q.v); schedule(false);
+  });
+  rotSlider.addEventListener('input', function () { rotating = true; setAngle(+rotSlider.value*Math.PI/180); });
+  rotSlider.addEventListener('change', function () { rotating = auto; schedule(true); });
+  function autoTick() { if (!auto) return; setAngle(ang + 0.012); requestAnimationFrame(autoTick); }
+  $('autoRot').addEventListener('click', function () {
+    auto = !auto; rotating = auto; this.setAttribute('aria-pressed', auto ? 'true' : 'false'); this.style.background = auto ? '#2a3a52' : '';
+    if (auto) autoTick(); else schedule(true);
+  });
+
+  // Se a irrigação começar a encharcar a vizinhança, ela para sozinha.
+  function checkOverload() {
+    var halted = false;
+    irr.forEach(function (sr) {
+      if (sr.stopped || sr.done) return;
+      var R = 3*IRR_R, i0 = Math.max(0, Math.floor((sr.u-R)*N)), i1 = Math.min(N-1, Math.ceil((sr.u+R)*N)), j0 = Math.max(0, Math.floor((sr.v-R)*N)), j1 = Math.min(N-1, Math.ceil((sr.v+R)*N)), over = false;
+      for (var i = i0; i <= i1 && !over; i++) for (var j = j0; j <= j1; j++) {
+        var add = sr.amp*gauss((i+0.5)/N, (j+0.5)/N, sr.u, sr.v, IRR_R);
+        if (add < 0.005) continue;
+        var val = grid[i*N+j];
+        if (val >= EXCESS && val - add < EXCESS) { over = true; break; }
+      }
+      if (over) {
+        sr.stopped = true; sr.stopAmp = sr.safeAmp; sr.p = 1; halted = true;
+        irrNotice = sr.safeAmp < 0.02 ? 'Não foi possível irrigar aqui sem encharcar a área ao redor.' : 'Irrigação parou sozinha: a água começou a passar do limite ao redor.';
+      } else { sr.safeAmp = sr.amp; if (sr.p >= 1) sr.done = true; }
+    });
+    return halted;
+  }
+  function irrActive() { return irr.some(function (s) { return !s.stopped && !s.done; }); }
+  function irrTick() {
+    snapIrr(); irrigating = irrActive(); render(true);
+    var halted = checkOverload(), any = irrActive();
+    if (halted || !any) { irrigating = any; render(true); }
+    if (any) requestAnimationFrame(irrTick); else irrLoop = false;
+  }
+  function doIrrigate(u, v) {
+    snapIrr();
+    var fi = fieldI(u, v, T); if (fi >= LOW) return;
+    if (irr.length >= 12) irr.shift();
+    irrNotice = '';
+    irr.push({ u:u, v:v, A:Math.max(0.15, TARGET - fi) * dose('irrLvl'), t0:performance.now(), amp:0, p:0, safeAmp:0, stopped:false, done:false });
+    irrigating = true;
+    if (!irrLoop) { irrLoop = true; requestAnimationFrame(irrTick); }
+  }
+  var cf = $('confirm'), cfCancel = $('cfCancel'), cfOk = $('cfOk');
+  function openConfirm(pv) {
+    var pct = pv.cells.length/(N*N)*100;
+    $('cfText').textContent = 'Irrigar por completo pode afetar a área ao redor: ' + (pct < 1 ? 'menos de 1%' : 'cerca de ' + pct.toFixed(1).replace('.', ',') + '%') + ' do mapa ficaria com água demais (marcado em vermelho). Se continuar, a irrigação para sozinha antes de passar do limite.';
+    cf.hidden = false; cfCancel.focus(); schedule(false);
+  }
+  function closeConfirm() { pending = null; cf.hidden = true; schedule(false); $('irrBtn').focus(); }
+  cfCancel.addEventListener('click', closeConfirm);
+  cfOk.addEventListener('click', function () { var p = pending; pending = null; cf.hidden = true; if (p) doIrrigate(p.u, p.v); });
+  cf.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { e.preventDefault(); closeConfirm(); }
+    else if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === cfCancel ? cfOk : cfCancel).focus(); }
+  });
+  $('irrBtn').addEventListener('click', function () {
+    snapIrr(); if (fieldI(pin.u, pin.v, T) >= LOW) return;
+    var pv = previewIrr(pin.u, pin.v);
+    if (pv.cells.length >= 6) { pending = { u:pin.u, v:pin.v, cells:pv.cells }; openConfirm(pv); } else doIrrigate(pin.u, pin.v);
+  });
+  $('nutBtn').addEventListener('click', function () { apply('nut'); });
+  $('defBtn').addEventListener('click', function () { apply('def'); });
+  ['nut', 'def'].forEach(function (k) { $(k + 'Reset').addEventListener('click', function () { apps = apps.filter(function (a) { return a.k !== k; }); schedule(true); }); });
+  ['irrLvl', 'nutLvl', 'defLvl'].forEach(function (id) { $(id).addEventListener('input', function () { schedule(false); }); });
+  $('irrReset').addEventListener('click', function () { irr.length = 0; irrigating = false; irrNotice = ''; schedule(true); });
+  ['lyPest','lyLeaf'].forEach(function (id) { $(id).addEventListener('change', function () { schedule(false); }); });
+
+  var monthBtns = [];
+  MESES.forEach(function (n, i) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = n.slice(0, 3); b.title = n; b.setAttribute('aria-label', n); b.setAttribute('aria-pressed', i === M ? 'true' : 'false');
+    b.addEventListener('click', function () {
+      M = i; day = Math.min(day, DIM[M]); T = Tof(); buildMarkers(); selId = null; buildCal();
+      monthBtns.forEach(function (x, k) { x.setAttribute('aria-pressed', k === M ? 'true' : 'false'); });
+      schedule(true);
+    });
+    monthBtns.push(b); $('months').appendChild(b);
+  });
+
+  // Calendário: escolher o dia do mês
+  function Tof() { return (day-1)/(DIM[M]-1)*6; }
+  function dateStr() { var m = M+1; return (day < 10 ? '0' : '') + day + '/' + (m < 10 ? '0' : '') + m + '/2026'; }
+  var WDN = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+  function markDay(focus) {
+    var bs = $('calGrid').querySelectorAll('button'), i;
+    for (i = 0; i < bs.length; i++) {
+      var on = +bs[i].dataset.d === day;
+      bs[i].setAttribute('aria-pressed', on ? 'true' : 'false'); bs[i].tabIndex = on ? 0 : -1;
+      if (on && focus) bs[i].focus();
+    }
+    $('calSel').textContent = WDN[new Date(2026, M, day).getDay()] + ', ' + dateStr();
+  }
+  function buildCal() {
+    var g = $('calGrid'), first = new Date(2026, M, 1).getDay(), i;
+    g.textContent = '';
+    for (i = 0; i < first; i++) g.appendChild(document.createElement('span'));
+    for (i = 1; i <= DIM[M]; i++) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = i; b.dataset.d = i; b.setAttribute('aria-label', i + ' de ' + MESES[M].toLowerCase() + ' de 2026');
+      g.appendChild(b);
+    }
+    $('calTitle').textContent = MESES[M] + ' de 2026';
+    markDay(false);
+  }
+  function selectDay(d, focus) { day = d; T = Tof(); markDay(focus); schedule(true); }
+  $('calGrid').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) { selectDay(+b.dataset.d, false); calOpen(false, true); } });
+  $('calGrid').addEventListener('keydown', function (e) {
+    var step = { ArrowLeft:-1, ArrowRight:1, ArrowUp:-7, ArrowDown:7 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    var nd = day + step; if (nd >= 1 && nd <= DIM[M]) selectDay(nd, true);
+  });
+  var calBtn = $('calBtn'), calBox = $('cal');
+  function calOpen(open, back) {
+    calBox.hidden = !open; calBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) { var sel = $('calGrid').querySelector('button[aria-pressed=true]'); if (sel) sel.focus(); }
+    else if (back) calBtn.focus();
+  }
+  calBtn.addEventListener('click', function () { calOpen(calBox.hidden); });
+  $('calClose').addEventListener('click', function () { calOpen(false, true); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !calBox.hidden) calOpen(false, true); });
+  document.addEventListener('click', function (e) { if (!calBox.hidden && !calBox.contains(e.target) && !calBtn.contains(e.target)) calOpen(false); });
+
+  // Escolher qual mapa mostrar
+  var kpiBtns = Array.prototype.slice.call(document.querySelectorAll('.kpi'));
+  function setMode(m) {
+    if (m === mapMode) return;
+    var cb = $('optPests');
+    if (m === 'pest') { prevOpt = cb.checked; cb.checked = true; cb.disabled = true; }
+    else if (mapMode === 'pest') { cb.checked = prevOpt; cb.disabled = false; }
+    mapMode = m;
+    kpiBtns.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.mode === m ? 'true' : 'false'); });
+    $('pestBody').hidden = !optOn();
+    schedule(true);
+  }
+  kpiBtns.forEach(function (b) { b.addEventListener('click', function () { setMode(b.dataset.mode); }); });
+  $('optPests').addEventListener('change', function () { $('pestBody').hidden = !optOn(); schedule(false); });
+
+  window.addEventListener('resize', function () { schedule(true); });
+  buildMarkers(); buildCal(); render(true);
+})();
+</script>
+</body>
+</html>
